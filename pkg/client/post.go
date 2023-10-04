@@ -31,14 +31,20 @@ type PostArgs struct {
 	Quoting      *syntax.ATURI
 	Languages    []string
 	EmbeddedLink string
+	CreatedAt    time.Time
 }
 
 // CreatePost creates a new post
 func (c *Client) CreatePost(ctx context.Context, args PostArgs) (*syntax.ATURI, error) {
 	post := bsky.FeedPost{
-		Text:      args.Text,
-		Tags:      args.Tags,
-		CreatedAt: time.Now().Format(time.RFC3339Nano),
+		Text: args.Text,
+		Tags: args.Tags,
+	}
+
+	if args.CreatedAt.IsZero() {
+		post.CreatedAt = time.Now().Format(time.RFC3339Nano)
+	} else {
+		post.CreatedAt = args.CreatedAt.Format(time.RFC3339Nano)
 	}
 
 	if args.Languages == nil {
