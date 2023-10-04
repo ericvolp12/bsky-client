@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -123,11 +124,20 @@ func (c *Client) CreatePost(ctx context.Context, args PostArgs) (*syntax.ATURI, 
 			return nil, fmt.Errorf("failed to get external metadata: %w", err)
 		}
 
+		var imageRef *util.LexBlob
+		if externalMeta.Image != nil {
+			imageRef, err = c.UploadImage(ctx, externalMeta.Image.Reader)
+			if err != nil {
+				return nil, fmt.Errorf("failed to upload external metadata image: %w", err)
+			}
+		}
+
 		post.Embed.EmbedExternal = &bsky.EmbedExternal{
 			External: &bsky.EmbedExternal_External{
 				Uri:         args.EmbeddedLink,
 				Title:       externalMeta.Title,
 				Description: externalMeta.Description,
+				Thumb:       imageRef,
 			},
 		}
 	}
@@ -168,6 +178,7 @@ func (c *Client) UploadImage(ctx context.Context, image io.Reader) (*util.LexBlo
 type externalMetadata struct {
 	Title       string
 	Description string
+	Image       *Image
 }
 
 func (c *Client) getExternalMetadata(ctx context.Context, url string) (*externalMetadata, error) {
@@ -176,6 +187,8 @@ func (c *Client) getExternalMetadata(ctx context.Context, url string) (*external
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
 
 	resp, err := cl.Do(req)
 	if err != nil {
@@ -202,10 +215,41 @@ func (c *Client) getExternalMetadata(ctx context.Context, url string) (*external
 		info.Description = info.Description[:500]
 	}
 
-	return &externalMetadata{
+	meta := externalMetadata{
 		Title:       info.Title,
 		Description: info.Description,
-	}, nil
+	}
+
+	if info.ImageSrcURL != "" {
+		req, err := http.NewRequestWithContext(ctx, "GET", info.ImageSrcURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request for external metadata image: %w", err)
+		}
+
+		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get external metadata image: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("failed to get external metadata image: status code %d", resp.StatusCode)
+		}
+
+		buf := make([]byte, resp.ContentLength)
+		_, err = resp.Body.Read(buf)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read external metadata image: %w", err)
+		}
+
+		meta.Image = &Image{
+			Reader: bytes.NewReader(buf),
+		}
+	}
+
+	return &meta, nil
 }
 
 func (c *Client) resolveRoot(ctx context.Context, uri syntax.ATURI) (postCid *string, rootURI *syntax.ATURI, rootCid *string, err error) {
