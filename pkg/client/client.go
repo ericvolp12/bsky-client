@@ -57,6 +57,7 @@ func New(pdsHost, plcHost string) *Client {
 				Timeout: 30 * time.Second,
 			},
 		},
+		clientMux:       &sync.RWMutex{},
 		AutoRefreshAuth: true,
 		dir:             &dir,
 		rl:              rate.NewLimiter(rate.Limit(8), 1),
