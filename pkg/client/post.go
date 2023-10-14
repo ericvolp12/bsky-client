@@ -151,11 +151,13 @@ func (c *Client) CreatePost(ctx context.Context, args PostArgs) (*syntax.ATURI, 
 	if c.rl != nil {
 		c.rl.Wait(ctx)
 	}
+	c.clientMux.RLock()
 	resp, err := comatproto.RepoCreateRecord(ctx, c.xrpcc, &comatproto.RepoCreateRecord_Input{
 		Collection: "app.bsky.feed.post",
 		Repo:       c.ActorDID.String(),
 		Record:     &util.LexiconTypeDecoder{Val: &post},
 	})
+	c.clientMux.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create post: %w", err)
 	}
@@ -173,7 +175,9 @@ func (c *Client) UploadImage(ctx context.Context, image io.Reader) (*util.LexBlo
 	if c.rl != nil {
 		c.rl.Wait(ctx)
 	}
+	c.clientMux.RLock()
 	blob, err := comatproto.RepoUploadBlob(ctx, c.xrpcc, image)
+	c.clientMux.RUnlock()
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload image: %w", err)
 	}
